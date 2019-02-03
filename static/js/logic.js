@@ -1,45 +1,85 @@
-// Creating map object
-var myMap = L.map("map", {
-  center: [0, 0],
-  zoom: 2.5
-});
 
-// Adding tile layer to the map
-L.tileLayer("https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}", {
-  attribution: "Map data &copy; <a href=\"https://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"https://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA</a>, Imagery © <a href=\"https://www.mapbox.com/\">Mapbox</a>",
-  maxZoom: 18,
-  id: "mapbox.streets",
-  accessToken: API_KEY
-}).addTo(myMap);
+function createMap(earthquake) {
 
+  // Create the tile layer that will be the background of the map
+  var streetmap = L.tileLayer("https://api.mapbox.com/styles/v1/mapbox/light-v9/tiles/256/{z}/{x}/{y}?access_token={accessToken}", {
+    attribution: "Map data &copy; <a href=\"http://openstreetmap.org\">OpenStreetMap</a> contributors, <a href=\"http://creativecommons.org/licenses/by-sa/2.0/\">CC-BY-SA</a>, Imagery © <a href=\"http://mapbox.com\">Mapbox</a>",
+    maxZoom: 18,
+    id: "mapbox.streets",
+    accessToken: API_KEY
+  });
 
+  // Create a baseMaps object to hold the streetmap layer
+  var baseMaps = {
+    "Street Map": streetmap
+  };
 
-// Assemble API query URL
-var url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson";
+  // Create an overlayMaps object to hold the bikeStations layer
+  var overlayMaps = {
+    "Quake Points": earthquake
+  };
 
-// Grab the data with d3
-d3.json(url, function(response) {
+  // Create the map object with options
+  var map = L.map("map", {
+    center: [0, 0],
+    zoom: 2,
+    layers: [streetmap, earthquake]
+  });
 
-  // Create a new marker cluster group
-  var markers = L.markerClusterGroup();
+  // Create a layer control, pass in the baseMaps and overlayMaps. Add the layer control to the map
+  L.control.layers(baseMaps, overlayMaps, {
+    collapsed: false
+  }).addTo(map);
+}
 
-  // Loop through data
-  for (var i = 0; i < response.length; i++) {
+function createMarkers(response) {
 
-    // Set the data location property to a variable
-    var location = response[i].geometry.coordinates;
-
-    // Check for location property
-    if (location) {
-
-      // Add a new marker to the cluster group and bind a pop-up
-      markers.addLayer(L.marker([location.coordinates[1], location.coordinates[0]])
-        .bindPopup(response[i].descriptor));
+  function createCircles(feature, location) {
+    var radius = feature.properties.mag;
+    // set features of points
+    var markerFeatures = {
+      fillOpacity: 0.75,
+      color: magColor(radius),
+      stroke: true,
+      weight: .5,
+      fillColor: magColor(radius),
+      radius: radius * 3
     }
+    return L.circleMarker(location, markerFeatures);
 
-  }
 
-  // Add our marker cluster layer to the map
-  myMap.addLayer(markers);
+  };
 
+  function toolTip(feature, layer) {
+    var magnitude = feature.properties.mag
+    var place = feature.properties.place
+    layer.bindPopup("<h2>" + place + "</h2> <hr> <h3>magnitudes: " + magnitude + "</h3>")
+  };
+
+
+
+
+  var earthquakes = L.geoJSON(response, {
+    pointToLayer: createCircles,
+    onEachFeature: toolTip
+  });
+
+
+  createMap(earthquakes);
+}
+
+// magnitude color
+function magColor(d) {
+  return d > 5 ? '#F06B6B' :
+    d > 4 ? '#F0A76B' :
+      d > 3 ? '#F3BA4D' :
+        d > 2 ? '#F3DB4D' :
+          d > 1 ? '#E1F34D' :
+            "#B7F34D";
+};
+
+// Perform an API call to the USGS API to get features information. 
+d3.json("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson", function (data) {
+  createMarkers(data.features);
 });
+
